@@ -177,7 +177,7 @@ export async function findPendingVideo(
     },
   }
 
-  const url = `${firestoreRoot(creds)}/videos:runQuery`
+  const url = `${firestoreRoot(creds)}:runQuery`
   const response = await fetch(url, {
     method: 'POST',
     headers: {

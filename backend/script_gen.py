@@ -1,7 +1,10 @@
-"""Script generation via the Groq API (Llama 3)."""
+"""Script generation via the Groq API."""
 from groq import Groq
 
 from config import CONFIG
+
+# Chat model identifier available on the configured Groq account.
+GROQ_MODEL = "qwen/qwen3.8-27b"
 
 SYSTEM_PROMPT = (
     "You are a professional short-form video scriptwriter. Write a short, "
@@ -15,11 +18,11 @@ SYSTEM_PROMPT = (
 
 
 def generate_script(topic: str) -> str:
-    """Generate a ~30 second spoken script about `topic` using Groq's Llama 3."""
+    """Generate a ~30 second spoken script about `topic` using Groq."""
     client = Groq(api_key=CONFIG.groq_api_key)
 
     response = client.chat.completions.create(
-        model="llama-3.1-8b-instant",
+        model=GROQ_MODEL,
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
             {

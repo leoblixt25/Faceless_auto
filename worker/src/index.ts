@@ -60,9 +60,14 @@ app.use('*', async (c, next) => {
 app.get('/', (c) => c.json({ ok: true, service: 'faceless-worker' }))
 
 app.post('/api/generate', async (c) => {
-  let body: { userId?: string; topic?: string; platform?: string }
+  let body: { userId?: string; topic?: string; platform?: string; documentId?: string }
   try {
-    body = (await c.req.json()) as { userId?: string; topic?: string; platform?: string }
+    body = (await c.req.json()) as {
+      userId?: string
+      topic?: string
+      platform?: string
+      documentId?: string
+    }
   } catch {
     return c.json({ error: 'Request body must be valid JSON.' }, 400)
   }
@@ -70,6 +75,8 @@ app.post('/api/generate', async (c) => {
   const userId = typeof body.userId === 'string' ? body.userId.trim() : ''
   const topic = typeof body.topic === 'string' ? body.topic.trim() : ''
   const platform = typeof body.platform === 'string' ? body.platform.trim() : ''
+  const documentId =
+    typeof body.documentId === 'string' ? body.documentId.trim() : ''
 
   const allowedPlatforms = ['youtube_shorts', 'tiktok', 'instagram_reels'] as const
   if (!userId || !topic || !platform) {
@@ -103,19 +110,30 @@ app.post('/api/generate', async (c) => {
 
   if (c.env.SKIP_FIRESTORE !== 'true') {
     try {
-      const doc = await findPendingVideo(c.env, userId)
-      if (doc) {
-        documentName = doc.name
-        clientPayload.documentId = documentName.split('/').pop() || ''
+      if (documentId) {
+        // Direct path update by the ID the frontend just created.
+        // No composite index required.
+        documentName = `videos/${documentId}`
+        clientPayload.documentId = documentId
         await updateVideoStatus(c.env, documentName, 'processing')
         status = 'processing'
         steps.push({ step: 'firestore', ok: true, document: documentName })
       } else {
-        steps.push({
-          step: 'firestore',
-          ok: false,
-          message: 'No pending video found for this user.',
-        })
+        // Fallback: locate the most recent pending video for the user.
+        const doc = await findPendingVideo(c.env, userId)
+        if (doc) {
+          documentName = doc.name
+          clientPayload.documentId = documentName.split('/').pop() || ''
+          await updateVideoStatus(c.env, documentName, 'processing')
+          status = 'processing'
+          steps.push({ step: 'firestore', ok: true, document: documentName })
+        } else {
+          steps.push({
+            step: 'firestore',
+            ok: false,
+            message: 'No pending video found for this user.',
+          })
+        }
       }
     } catch (err) {
       steps.push({ step: 'firestore', ok: false, error: getErrorMessage(err) })

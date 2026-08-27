@@ -28,6 +28,7 @@ export async function dispatchGenerateVideo(
       Accept: 'application/vnd.github+json',
       'X-GitHub-Api-Version': '2022-11-28',
       'Content-Type': 'application/json',
+      'User-Agent': 'faceless-worker',
     },
     body: JSON.stringify({
       event_type: 'generate-video',
