@@ -1,0 +1,19 @@
+name = "faceless-worker"
+main = "src/index.ts"
+compatibility_date = "2025-06-01"
+
+# Environment variables (non-secret, readable in code)
+[vars]
+# Allowed origin for CORS. Set to your frontend origin.
+ALLOWED_ORIGIN = "http://localhost:5173"
+
+# Set to true to skip the Firestore status update and only dispatch to GitHub.
+# Useful during early testing before service-account credentials are available.
+SKIP_FIRESTORE = "false"
+
+# Repository to dispatch the GitHub Action to, e.g. "leoblixt25/Faceless_auto"
+GITHUB_REPO = "leoblixt25/Faceless_auto"
+
+# Secret environment variables are set via `wrangler secret put` and are NOT
+# defined here. They are available at runtime as env.GITHUB_PAT and
+# env.FIREBASE_CREDENTIALS (JSON string of the service account).

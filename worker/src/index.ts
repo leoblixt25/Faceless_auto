@@ -1,0 +1,139 @@
+import { Hono } from 'hono'
+import { findPendingVideo, updateVideoStatus } from './firebase'
+import { dispatchGenerateVideo } from './github'
+import type { Env } from './types'
+
+const app = new Hono<{ Bindings: Env }>()
+
+function corsHeaders(origin: string) {
+  return {
+    'Access-Control-Allow-Origin': origin,
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Max-Age': '86400',
+  }
+}
+
+function isAllowedOrigin(env: Env, origin: string) {
+  const allowed = (env.ALLOWED_ORIGIN || '').split(',').map((o) => o.trim())
+  return allowed.includes(origin)
+}
+
+function getErrorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err)
+}
+
+type Step = {
+  step: string
+  ok?: boolean
+  skipped?: boolean
+  document?: string
+  message?: string
+  error?: string
+  status?: number
+  body?: string
+}
+
+app.use('*', async (c, next) => {
+  const origin = c.req.header('origin')
+  c.header('Vary', 'Origin')
+
+  if (origin && isAllowedOrigin(c.env, origin)) {
+    Object.entries(corsHeaders(origin)).forEach(([key, value]) => {
+      c.header(key, value)
+    })
+  }
+
+  // Handle CORS preflight.
+  if (c.req.method === 'OPTIONS') {
+    return c.body(null, 204)
+  }
+
+  await next()
+})
+
+app.get('/', (c) => c.json({ ok: true, service: 'faceless-worker' }))
+
+app.post('/api/generate', async (c) => {
+  let body: { userId?: string; topic?: string; platform?: string }
+  try {
+    body = (await c.req.json()) as { userId?: string; topic?: string; platform?: string }
+  } catch {
+    return c.json({ error: 'Request body must be valid JSON.' }, 400)
+  }
+
+  const userId = typeof body.userId === 'string' ? body.userId.trim() : ''
+  const topic = typeof body.topic === 'string' ? body.topic.trim() : ''
+  const platform = typeof body.platform === 'string' ? body.platform.trim() : ''
+
+  const allowedPlatforms = ['youtube_shorts', 'tiktok', 'instagram_reels'] as const
+  if (!userId || !topic || !platform) {
+    return c.json(
+      { error: 'userId, topic, and platform are all required.' },
+      400,
+    )
+  }
+  if (!(allowedPlatforms as readonly string[]).includes(platform)) {
+    return c.json(
+      {
+        error: `platform must be one of: ${allowedPlatforms.join(', ')}.`,
+      },
+      400,
+    )
+  }
+
+  const clientPayload = { userId, topic, platform }
+
+  // Steps
+  // 1) Securely update the matching Firestore document to "processing".
+  // 2) Dispatch the GitHub repository_dispatch event.
+  const steps: Step[] = []
+  let status = 'pending'
+  let documentName: string | null = null
+
+  if (c.env.SKIP_FIRESTORE !== 'true') {
+    try {
+      const doc = await findPendingVideo(c.env, userId)
+      if (doc) {
+        documentName = doc.name
+        await updateVideoStatus(c.env, documentName, 'processing')
+        status = 'processing'
+        steps.push({ step: 'firestore', ok: true, document: documentName })
+      } else {
+        steps.push({
+          step: 'firestore',
+          ok: false,
+          message: 'No pending video found for this user.',
+        })
+      }
+    } catch (err) {
+      steps.push({ step: 'firestore', ok: false, error: getErrorMessage(err) })
+    }
+  } else {
+    steps.push({ step: 'firestore', skipped: true })
+  }
+
+  // Always dispatch to GitHub (unless the caller only wanted a status check).
+  try {
+    const result = await dispatchGenerateVideo(c.env, clientPayload)
+    steps.push({ step: 'github', ok: true, ...result })
+  } catch (err) {
+    steps.push({ step: 'github', ok: false, error: getErrorMessage(err) })
+  }
+
+  const allOk = steps.every((s) => s.ok || s.skipped)
+
+  return c.json(
+    {
+      accepted: allOk,
+      status,
+      steps,
+      client_payload: clientPayload,
+    },
+    allOk ? 202 : 502,
+  )
+})
+
+export default {
+  fetch: app.fetch,
+}
