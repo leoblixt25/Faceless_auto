@@ -30,6 +30,7 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Run video generation
+        id: generate
         working-directory: backend
         env:
           # Free-text fields must go through env vars (not shell args) so
@@ -47,3 +48,13 @@ jobs:
             --platform "${{ github.event.client_payload.platform }}" \
             --documentId "${{ github.event.client_payload.documentId }}" \
             --duration "${{ github.event.client_payload.duration || 30 }}"
+
+      # Cleanup: if generation failed, flip the Firestore doc from
+      # pending/processing to "failed" so videos don't hang at "processing".
+      - name: Mark video failed (on generation failure)
+        if: always() && steps.generate.outcome == 'failure'
+        working-directory: backend
+        env:
+          DOCUMENT_ID: ${{ github.event.client_payload.documentId }}
+          FIREBASE_CREDENTIALS: ${{ secrets.FIREBASE_CREDENTIALS }}
+        run: python mark_failed.py
