@@ -1,11 +1,17 @@
-name = "faceless-worker"
+name = "faceless-auto"
 main = "src/index.ts"
 compatibility_date = "2025-06-01"
 
+# Serve the built React frontend as static assets from the same Worker,
+# so the app and the /api/* bridge live at a single URL.
+[assets]
+directory = "../dist"
+not_found_handling = "single-page-application"
+
 # Environment variables (non-secret, readable in code)
 [vars]
-# Allowed origin for CORS. Set to your frontend origin.
-ALLOWED_ORIGIN = "http://localhost:5173"
+# Allowed origin for CORS. Same-origin API calls still work regardless.
+ALLOWED_ORIGIN = "https://faceless-auto.leo-blixt77.workers.dev"
 
 # Set to true to skip the Firestore status update and only dispatch to GitHub.
 # Useful during early testing before service-account credentials are available.

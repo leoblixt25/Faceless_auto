@@ -7,6 +7,9 @@ export interface Env {
   TIKTOK_CLIENT_KEY?: string
   TIKTOK_CLIENT_SECRET?: string
   TIKTOK_REDIRECT_URI?: string
+  ASSETS?: {
+    fetch(request: Request): Promise<Response>
+  }
 }
 
 export interface ServiceAccount {
