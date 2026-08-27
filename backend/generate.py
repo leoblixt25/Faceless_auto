@@ -84,6 +84,10 @@ def main(argv=None):
     logger.info("Status updated -> completed. URL: %s", video_url)
 
     # --- Phase 4/5: publish to the target platform ---------------------
+    # Publishing is BEST-EFFORT: the video is already rendered and stored, so
+    # a publishing failure must NOT fail the whole pipeline. If publishing
+    # succeeds we mark the doc posted; otherwise we keep it completed and
+    # record the error, but still exit 0 so the GitHub Action is green.
     try:
         link = publisher.publish(
             platform=args.platform,
@@ -93,20 +97,18 @@ def main(argv=None):
             description=f"Faceless video about: {args.topic}",
             caption=script[:2200],
         )
-    except Exception as exc:  # publishing is best-effort; record failure
-        logger.warning("Publishing to %s failed: %s", args.platform, exc)
         firebase_store.update_status(
-            args.documentId, "failed", error=f"publish: {exc}"
+            args.documentId,
+            "posted",
+            socialLink=link,
+            platform=args.platform,
         )
-        return 1
-
-    firebase_store.update_status(
-        args.documentId,
-        "posted",
-        socialLink=link,
-        platform=args.platform,
-    )
-    logger.info("Status updated -> posted. Link: %s", link)
+        logger.info("Status updated -> posted. Link: %s", link)
+    except Exception as exc:
+        logger.warning("Publishing to %s failed (video still produced): %s", args.platform, exc)
+        firebase_store.update_status(
+            args.documentId, "completed", publishError=f"publish: {exc}"
+        )
     return 0
 
 
