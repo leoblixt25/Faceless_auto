@@ -85,6 +85,26 @@ export default function VideoCard({ video }) {
         {video.topic}
       </p>
 
+      {video.videoUrl && (
+        <div className="mt-4">
+          <video
+            src={video.videoUrl}
+            controls
+            preload="metadata"
+            className="w-full rounded-xl border border-zinc-800 bg-black"
+          />
+          <a
+            href={video.videoUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            download
+            className="mt-2 inline-block text-sm font-medium text-purple-400 transition hover:text-purple-300"
+          >
+            Download / open video →
+          </a>
+        </div>
+      )}
+
       {video.socialLink && (
         <a
           href={video.socialLink}
