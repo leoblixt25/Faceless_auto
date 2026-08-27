@@ -15,6 +15,7 @@ repository_dispatch `client_payload` fields as arguments.
 """
 import argparse
 import logging
+import os
 import sys
 import time
 from pathlib import Path
@@ -35,13 +36,17 @@ logger = logging.getLogger("generate")
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(description="Generate a faceless short video.")
     parser.add_argument("--userId", "--user_id", dest="userId", required=True)
-    parser.add_argument("--topic", required=True)
+    parser.add_argument("--topic", default=os.environ.get("TOPIC", ""),
+                        help="Video topic/prompt (may be supplied via the TOPIC env var).")
     parser.add_argument("--platform", required=True,
                         help="youtube_shorts | tiktok | instagram_reels")
     parser.add_argument("--documentId", "--document_id", dest="documentId", default=None)
     parser.add_argument("--duration", type=int, default=30,
                         help="Target video length in seconds (30|60|90).")
-    return parser.parse_args(argv)
+    args = parser.parse_args(argv)
+    if not args.topic or not args.topic.strip():
+        parser.error("a non-empty --topic (or TOPIC env var) is required")
+    return args
 
 
 def build_video(topic, work_dir, duration=30):
