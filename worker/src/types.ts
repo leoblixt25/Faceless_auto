@@ -4,6 +4,9 @@ export interface Env {
   SKIP_FIRESTORE?: string
   GITHUB_PAT?: string
   FIREBASE_CREDENTIALS?: string
+  TIKTOK_CLIENT_KEY?: string
+  TIKTOK_CLIENT_SECRET?: string
+  TIKTOK_REDIRECT_URI?: string
 }
 
 export interface ServiceAccount {
@@ -23,4 +26,5 @@ export interface ClientPayload {
   userId: string
   topic: string
   platform: string
+  documentId?: string
 }

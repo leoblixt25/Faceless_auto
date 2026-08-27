@@ -17,6 +17,11 @@ const STATUS_STYLES = {
     badge: 'bg-emerald-500/10 text-emerald-400 ring-emerald-500/30',
     label: 'Completed',
   },
+  [VIDEO_STATUS.POSTED]: {
+    dot: 'bg-purple-400',
+    badge: 'bg-purple-500/10 text-purple-400 ring-purple-500/30',
+    label: 'Posted',
+  },
   [VIDEO_STATUS.FAILED]: {
     dot: 'bg-red-400',
     badge: 'bg-red-500/10 text-red-400 ring-red-500/30',
@@ -79,6 +84,17 @@ export default function VideoCard({ video }) {
       <p className="mt-4 line-clamp-2 text-sm leading-relaxed text-zinc-300">
         {video.topic}
       </p>
+
+      {video.socialLink && (
+        <a
+          href={video.socialLink}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-3 inline-block text-sm font-medium text-purple-400 transition hover:text-purple-300"
+        >
+          View on {platform ? platform.label : 'platform'} →
+        </a>
+      )}
     </div>
   )
 }

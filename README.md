@@ -1,13 +1,43 @@
 # Faceless Video Studio
 
-A free-tier, automated faceless short video generator. **Phase 1** sets up the frontend architecture, user authentication, and Firestore database schema.
+A free-tier, automated faceless short video generator.
+
+## Architecture
+
+```
+React (Vite + Tailwind)          Cloudflare Worker             GitHub Actions            Social platforms
+┌────────────────────┐   POST     ┌──────────────────┐  dispatch ┌──────────────────┐  ┌─────────────────┐
+│ Google Sign-in     │ ─────────► │ /api/generate    │ ─────────► │ video_builder.yml │  │ YouTube Shorts  │
+│ New Video form     │            │ (Hono)           │           │  generate.py      ├──►│ Instagram Reels │
+│ Video feed (realtime)│          │  • Firestore     │           │  Groq → TTS →     │   │ TikTok          │
+│ TikTok OAuth       │            │  • GitHub dispatch│           │  Pexels → MoviePy │   └─────────────────┘
+└────────────────────┘            └──────────────────┘           │  → Firebase       │
+                                                                 └──────────────────┘
+```
+
+## Phases
+
+- **Phase 1 — Frontend + Auth + DB:** React/Vite + Tailwind, Google Sign-In,
+  Firestore `videos` schema, dashboard, real-time feed.
+- **Phase 2 — API bridge:** Cloudflare Worker (Hono) — validates requests,
+  marks Firestore `processing`, dispatches GitHub `repository_dispatch`.
+- **Phase 3 — Video engine:** Python — Groq script → edge-tts → Pexels stock →
+  MoviePy assembly → Firebase Storage → Firestore `completed`.
+- **Phase 4 — Publish:** YouTube Shorts (Data API) and Instagram Reels
+  (Graph API) uploading → Firestore `posted`.
+- **Phase 5 — TikTok:** Content Posting API + "Login with TikTok" OAuth flow.
 
 ## Tech Stack
 
-- **Frontend:** React 19 (Vite 8)
-- **Styling:** Tailwind CSS v4
-- **Database & Auth:** Firebase (Firestore + Firebase Auth with Google Sign-In)
-- **Routing:** React Router v7 (HashRouter)
+- **Frontend:** React 19 (Vite 8), Tailwind CSS v4, React Router v7 (HashRouter)
+- **Auth & DB:** Firebase (Auth, Firestore, Storage)
+- **Bridge:** Cloudflare Workers (Hono), GitHub REST API
+- **Engine:** Python 3, Groq, edge-tts, Pexels, MoviePy, Firebase Admin
+- **CI:** GitHub Actions
+
+See the per-directory READMEs for detailed setup: `backend/README.md`,
+`worker/README.md`, and the sections below for frontend setup.
+
 
 ## Getting Started
 

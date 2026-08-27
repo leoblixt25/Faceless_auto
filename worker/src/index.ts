@@ -1,6 +1,11 @@
 import { Hono } from 'hono'
-import { findPendingVideo, updateVideoStatus } from './firebase'
+import {
+  findPendingVideo,
+  saveTiktokToken,
+  updateVideoStatus,
+} from './firebase'
 import { dispatchGenerateVideo } from './github'
+import { exchangeAuthCode } from './tiktok'
 import type { Env } from './types'
 
 const app = new Hono<{ Bindings: Env }>()
@@ -82,7 +87,12 @@ app.post('/api/generate', async (c) => {
     )
   }
 
-  const clientPayload = { userId, topic, platform }
+  const clientPayload = {
+    userId,
+    topic,
+    platform,
+    documentId: '',
+  }
 
   // Steps
   // 1) Securely update the matching Firestore document to "processing".
@@ -96,6 +106,7 @@ app.post('/api/generate', async (c) => {
       const doc = await findPendingVideo(c.env, userId)
       if (doc) {
         documentName = doc.name
+        clientPayload.documentId = documentName.split('/').pop() || ''
         await updateVideoStatus(c.env, documentName, 'processing')
         status = 'processing'
         steps.push({ step: 'firestore', ok: true, document: documentName })
@@ -132,6 +143,38 @@ app.post('/api/generate', async (c) => {
     },
     allOk ? 202 : 502,
   )
+})
+
+app.post('/api/tiktok/token', async (c) => {
+  let body: { userId?: string; code?: string }
+  try {
+    body = (await c.req.json()) as { userId?: string; code?: string }
+  } catch {
+    return c.json({ error: 'Request body must be valid JSON.' }, 400)
+  }
+
+  const userId = typeof body.userId === 'string' ? body.userId.trim() : ''
+  const code = typeof body.code === 'string' ? body.code.trim() : ''
+  if (!userId || !code) {
+    return c.json({ error: 'userId and code are required.' }, 400)
+  }
+
+  const redirectUri = c.env.TIKTOK_REDIRECT_URI
+  if (!redirectUri) {
+    return c.json({ error: 'TIKTOK_REDIRECT_URI is not configured.' }, 500)
+  }
+
+  try {
+    const token = await exchangeAuthCode(c.env, code, redirectUri)
+    await saveTiktokToken(c.env, userId, token)
+    return c.json({
+      ok: true,
+      openId: token.openId,
+      expiresAt: token.expiresAt,
+    })
+  } catch (err) {
+    return c.json({ ok: false, error: getErrorMessage(err) }, 502)
+  }
 })
 
 export default {

@@ -1,0 +1,17 @@
+# Faceless video engine dependencies
+# Phase 3 (generation)
+groq>=0.12.0
+edge-tts>=6.1.0
+requests>=2.31.0
+moviepy>=2.0.0
+Pillow>=10.0.0
+python-dotenv>=1.0.0
+
+# Firebase (Storage upload + Firestore) - runs on the GitHub runner
+firebase-admin>=6.5.0
+google-cloud-storage>=2.10.0
+
+# Phase 4 (YouTube upload)
+google-api-python-client>=2.100.0
+google-auth-oauthlib>=1.0.0
+google-auth-httplib2>=0.1.0

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { PLATFORMS } from '../../utils/constants'
 import { createVideo } from '../../lib/videos'
+import { dispatchVideoGeneration } from '../../lib/api'
 
 export default function NewVideo() {
   const { user } = useAuth()
@@ -19,14 +20,24 @@ export default function NewVideo() {
     setSubmitting(true)
     setError('')
     try {
-      await createVideo({
+      const documentId = await createVideo({
         userId: user.uid,
         topic: topic.trim(),
         platform,
+        status: 'pending',
       })
+
+      // Kick off the cloud pipeline through the Worker bridge.
+      await dispatchVideoGeneration({
+        userId: user.uid,
+        topic: topic.trim(),
+        platform,
+        documentId,
+      })
+
       setTopic('')
     } catch (err) {
-      console.error('Failed to create video:', err)
+      console.error('Failed to submit video request:', err)
       setError('Failed to submit your request. Please try again.')
     } finally {
       setSubmitting(false)

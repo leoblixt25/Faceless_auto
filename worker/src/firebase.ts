@@ -231,3 +231,57 @@ export async function updateVideoStatus(
 
   return response.json()
 }
+
+/** Store (or update) the user's TikTok OAuth token in the tiktok_tokens collection.
+ *  A single PATCH creates the document if missing and applies the update mask.
+ */
+export async function saveTiktokToken(
+  env: Env,
+  userId: string,
+  tokenData: {
+    accessToken: string
+    refreshToken?: string
+    openId?: string
+    expiresAt: string
+  },
+): Promise<string> {
+  const creds = getCredentials(env)
+  const token = await getAccessToken(creds)
+
+  const docPath = encodeURIComponent(userId)
+  const mask =
+    'updateMask.fieldPaths=accessToken&updateMask.fieldPaths=refreshToken' +
+    '&updateMask.fieldPaths=openId&updateMask.fieldPaths=expiresAt' +
+    '&updateMask.fieldPaths=updatedAt'
+  const url = `${firestoreRoot(creds)}/tiktok_tokens/${docPath}?${mask}`
+
+  const fields: Record<string, unknown> = {
+    accessToken: { stringValue: tokenData.accessToken },
+    expiresAt: { stringValue: tokenData.expiresAt },
+    updatedAt: { timestampValue: new Date().toISOString() },
+  }
+  if (tokenData.refreshToken) {
+    fields.refreshToken = { stringValue: tokenData.refreshToken }
+  }
+  if (tokenData.openId) {
+    fields.openId = { stringValue: tokenData.openId }
+  }
+
+  const response = await fetch(url, {
+    method: 'PATCH',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ fields }),
+  })
+
+  if (!response.ok) {
+    const text = await response.text()
+    throw new Error(
+      `Firestore token save failed (${response.status}): ${text}`,
+    )
+  }
+
+  return userId
+}
