@@ -20,6 +20,7 @@ import time
 from pathlib import Path
 
 import firebase_store
+import release_store
 
 import publish as publisher
 from assets import fetch_assets
@@ -70,8 +71,10 @@ def main(argv=None):
     script, audio_path, video_path = build_video(args.topic, "assets")
     logger.info("Rendered video at %s (%.1fs)", video_path, time.time() - started)
 
-    # Firebase upload + status update.
-    video_url = firebase_store.upload_video(video_path, args.userId, args.documentId or "")
+    # Upload the video (GitHub Releases — free, public URL) + status update.
+    video_url = release_store.upload_video(
+        video_path, args.userId, args.documentId or ""
+    )
     firebase_store.update_status(
         args.documentId,
         "completed",
