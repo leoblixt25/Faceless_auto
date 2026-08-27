@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
-import { PLATFORMS } from '../../utils/constants'
+import { PLATFORMS, DURATION_OPTIONS } from '../../utils/constants'
 import { createVideo } from '../../lib/videos'
 import { dispatchVideoGeneration } from '../../lib/api'
 
@@ -10,6 +10,7 @@ export default function NewVideo() {
   const navigate = useNavigate()
   const [topic, setTopic] = useState('')
   const [platform, setPlatform] = useState(PLATFORMS[0].value)
+  const [duration, setDuration] = useState(DURATION_OPTIONS[0].value)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
 
@@ -24,6 +25,7 @@ export default function NewVideo() {
         userId: user.uid,
         topic: topic.trim(),
         platform,
+        duration,
         status: 'pending',
       })
 
@@ -33,6 +35,7 @@ export default function NewVideo() {
         topic: topic.trim(),
         platform,
         documentId,
+        duration,
       })
 
       setTopic('')
@@ -77,6 +80,24 @@ export default function NewVideo() {
             className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-sm text-white outline-none transition focus:border-purple-500 focus:ring-2 focus:ring-purple-500/30"
           >
             {PLATFORMS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label htmlFor="duration" className="mb-1.5 block text-sm font-medium text-zinc-300">
+            Video Length
+          </label>
+          <select
+            id="duration"
+            value={duration}
+            onChange={(event) => setDuration(Number(event.target.value))}
+            className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-sm text-white outline-none transition focus:border-purple-500 focus:ring-2 focus:ring-purple-500/30"
+          >
+            {DURATION_OPTIONS.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
               </option>

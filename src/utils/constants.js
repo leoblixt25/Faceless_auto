@@ -4,6 +4,12 @@ export const PLATFORMS = [
   { value: 'instagram_reels', label: 'Instagram Reels' },
 ]
 
+export const DURATION_OPTIONS = [
+  { value: 30, label: 'Short (~30s)' },
+  { value: 60, label: 'Medium (~60s)' },
+  { value: 90, label: 'Long (~90s)' },
+]
+
 export const VIDEO_STATUS = {
   PENDING: 'pending',
   PROCESSING: 'processing',

@@ -30,4 +30,5 @@ export interface ClientPayload {
   topic: string
   platform: string
   documentId?: string
+  duration?: number
 }

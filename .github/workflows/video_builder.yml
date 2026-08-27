@@ -42,4 +42,5 @@ jobs:
             --userId "${{ github.event.client_payload.userId }}" \
             --topic  "${{ github.event.client_payload.topic }}" \
             --platform "${{ github.event.client_payload.platform }}" \
-            --documentId "${{ github.event.client_payload.documentId }}"
+            --documentId "${{ github.event.client_payload.documentId }}" \
+            --duration "${{ github.event.client_payload.duration || 30 }}"

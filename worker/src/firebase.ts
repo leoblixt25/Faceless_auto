@@ -285,3 +285,22 @@ export async function saveTiktokToken(
 
   return userId
 }
+
+/** Delete a video document from Firestore by its document id (via service account). */
+export async function deleteVideoDoc(env: Env, documentId: string): Promise<void> {
+  const creds = getCredentials(env)
+  const token = await getAccessToken(creds)
+
+  const url = `${firestoreRoot(creds)}/videos/${encodeURIComponent(documentId)}`
+  const response = await fetch(url, {
+    method: 'DELETE',
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  })
+
+  if (!response.ok && response.status !== 404) {
+    const text = await response.text()
+    throw new Error(`Firestore delete failed (${response.status}): ${text}`)
+  }
+}

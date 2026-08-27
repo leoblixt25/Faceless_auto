@@ -3,8 +3,9 @@ import {
   findPendingVideo,
   saveTiktokToken,
   updateVideoStatus,
+  deleteVideoDoc,
 } from './firebase'
-import { dispatchGenerateVideo } from './github'
+import { dispatchGenerateVideo, deleteRelease } from './github'
 import { exchangeAuthCode } from './tiktok'
 import type { Env } from './types'
 
@@ -13,7 +14,7 @@ const app = new Hono<{ Bindings: Env }>()
 function corsHeaders(origin: string) {
   return {
     'Access-Control-Allow-Origin': origin,
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Max-Age': '86400',
   }
@@ -60,13 +61,20 @@ app.use('*', async (c, next) => {
 app.get('/', (c) => c.json({ ok: true, service: 'faceless-worker' }))
 
 app.post('/api/generate', async (c) => {
-  let body: { userId?: string; topic?: string; platform?: string; documentId?: string }
+  let body: {
+    userId?: string
+    topic?: string
+    platform?: string
+    documentId?: string
+    duration?: number
+  }
   try {
     body = (await c.req.json()) as {
       userId?: string
       topic?: string
       platform?: string
       documentId?: string
+      duration?: number
     }
   } catch {
     return c.json({ error: 'Request body must be valid JSON.' }, 400)
@@ -77,6 +85,7 @@ app.post('/api/generate', async (c) => {
   const platform = typeof body.platform === 'string' ? body.platform.trim() : ''
   const documentId =
     typeof body.documentId === 'string' ? body.documentId.trim() : ''
+  const duration = Number.isFinite(Number(body.duration)) ? Number(body.duration) : 30
 
   const allowedPlatforms = ['youtube_shorts', 'tiktok', 'instagram_reels'] as const
   if (!userId || !topic || !platform) {
@@ -99,6 +108,7 @@ app.post('/api/generate', async (c) => {
     topic,
     platform,
     documentId: '',
+    duration,
   }
 
   // Steps
@@ -161,6 +171,34 @@ app.post('/api/generate', async (c) => {
     },
     allOk ? 202 : 502,
   )
+})
+
+app.delete('/api/video/:id', async (c) => {
+  const id = c.req.param('id')
+  if (!id) {
+    return c.json({ error: 'Video id is required.' }, 400)
+  }
+
+  const steps: { step: string; ok: boolean; error?: string }[] = []
+
+  // 1) Remove the Firestore document (via service account, bypasses client rules).
+  try {
+    await deleteVideoDoc(c.env, id)
+    steps.push({ step: 'firestore', ok: true })
+  } catch (err) {
+    steps.push({ step: 'firestore', ok: false, error: getErrorMessage(err) })
+  }
+
+  // 2) Remove the uploaded GitHub Release asset (best-effort).
+  try {
+    await deleteRelease(c.env, id)
+    steps.push({ step: 'github', ok: true })
+  } catch (err) {
+    steps.push({ step: 'github', ok: false, error: getErrorMessage(err) })
+  }
+
+  const allOk = steps.every((s) => s.ok)
+  return c.json({ deleted: allOk, steps }, allOk ? 200 : 502)
 })
 
 app.post('/api/tiktok/token', async (c) => {

@@ -138,7 +138,10 @@ def assemble_video(video_paths, audio_path, script, output_path):
     video = concatenate_videoclips(clips, method="compose")
 
     # Match the video duration to the narration length.
-    if video.duration > audio_duration + 0.5:
+    if video.duration < audio_duration:
+        # Not enough footage -> loop the montage to cover the narration.
+        video = video.loop(duration=audio_duration)
+    elif video.duration > audio_duration + 0.5:
         video = video.subclipped(0, audio_duration)
     video = video.with_audio(audio)
 

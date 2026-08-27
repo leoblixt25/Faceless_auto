@@ -1,5 +1,7 @@
-import { VIDEO_STATUS, STATUS_LABELS, PLATFORMS } from '../../utils/constants'
+import { useState } from 'react'
+import { VIDEO_STATUS, STATUS_LABELS, PLATFORMS, DURATION_OPTIONS } from '../../utils/constants'
 import { formatDate } from '../../utils/date'
+import { deleteVideo } from '../../lib/api'
 
 const STATUS_STYLES = {
   [VIDEO_STATUS.PENDING]: {
@@ -57,9 +59,33 @@ export default function VideoCard({ video }) {
   const platform = PLATFORMS.find((p) => p.value === video.platform)
   const status = STATUS_STYLES[video.status] || STATUS_STYLES[VIDEO_STATUS.PENDING]
   const isProcessing = video.status === VIDEO_STATUS.PROCESSING
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState('')
+
+  const durationLabel =
+    DURATION_OPTIONS.find((d) => d.value === video.duration)?.label ||
+    (video.duration ? `~${video.duration}s` : null)
+
+  const handleDelete = async () => {
+    if (deleting) return
+    const confirmed = window.confirm(
+      'Delete this video? This also removes the stored file and cannot be undone.',
+    )
+    if (!confirmed) return
+
+    setDeleting(true)
+    setDeleteError('')
+    try {
+      await deleteVideo(video.id)
+    } catch (err) {
+      console.error('Failed to delete video:', err)
+      setDeleteError('Could not delete. Please try again.')
+      setDeleting(false)
+    }
+  }
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5">
+    <div className="relative overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5">
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-800">
@@ -69,21 +95,50 @@ export default function VideoCard({ video }) {
             <p className="text-sm font-semibold text-white">
               {platform ? platform.label : 'Unknown Platform'}
             </p>
-            <p className="text-xs text-zinc-500">{formatDate(video.createdAt)}</p>
+            <p className="text-xs text-zinc-500">
+              {formatDate(video.createdAt)}
+              {durationLabel ? ` · ${durationLabel}` : ''}
+            </p>
           </div>
         </div>
 
-        <span
-          className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset ${status.badge}`}
-        >
-          <span className={`h-1.5 w-1.5 rounded-full ${status.dot} ${isProcessing ? 'animate-pulse' : ''}`} />
-          {STATUS_LABELS[video.status] || status.label}
-        </span>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handleDelete}
+            disabled={deleting}
+            title="Delete video"
+            className="rounded-lg p-1.5 text-zinc-500 transition hover:bg-red-500/10 hover:text-red-400 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <svg
+              className="h-4 w-4"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M3 6h18M8 6V4a1 1 0 011-1h6a1 1 0 011 1v2m2 0v14a1 1 0 01-1 1H6a1 1 0 01-1-1V6m4 5v6m4-6v6" />
+            </svg>
+          </button>
+          <span
+            className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset ${status.badge}`}
+          >
+            <span className={`h-1.5 w-1.5 rounded-full ${status.dot} ${isProcessing ? 'animate-pulse' : ''}`} />
+            {STATUS_LABELS[video.status] || status.label}
+          </span>
+        </div>
       </div>
 
       <p className="mt-4 line-clamp-2 text-sm leading-relaxed text-zinc-300">
         {video.topic}
       </p>
+
+      {deleting && (
+        <p className="mt-3 text-xs text-zinc-500">Deleting…</p>
+      )}
+      {deleteError && <p className="mt-3 text-xs text-red-400">{deleteError}</p>}
 
       {video.videoUrl && (
         <div className="mt-4">

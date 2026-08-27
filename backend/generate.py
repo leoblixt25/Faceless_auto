@@ -39,22 +39,26 @@ def parse_args(argv=None):
     parser.add_argument("--platform", required=True,
                         help="youtube_shorts | tiktok | instagram_reels")
     parser.add_argument("--documentId", "--document_id", dest="documentId", default=None)
+    parser.add_argument("--duration", type=int, default=30,
+                        help="Target video length in seconds (30|60|90).")
     return parser.parse_args(argv)
 
 
-def build_video(topic, work_dir):
+def build_video(topic, work_dir, duration=30):
     """Run the display pipeline and return (script, audio_path, video_path)."""
     work = Path(work_dir)
     work.mkdir(parents=True, exist_ok=True)
 
     logger.info("Generating script...")
-    script = generate_script(topic)
+    script = generate_script(topic, duration)
 
     logger.info("Generating audio (edge-tts)...")
     audio_path = text_to_speech(script, str(work / "narration.mp3"))
 
+    # Fetch enough vertical clips to cover the requested length (~10s each).
+    clip_count = max(3, -(-duration // 10))
     logger.info("Fetching stock assets (Pexels)...")
-    video_paths = fetch_assets(topic, count=3, work_dir=str(work))
+    video_paths = fetch_assets(topic, count=clip_count, work_dir=str(work))
 
     logger.info("Assembling video (MoviePy)...")
     output_path = str(work / "final_video.mp4")
@@ -68,7 +72,7 @@ def main(argv=None):
     started = time.time()
 
     # --- Phase 3: render the video -------------------------------------
-    script, audio_path, video_path = build_video(args.topic, "assets")
+    script, audio_path, video_path = build_video(args.topic, "assets", args.duration)
     logger.info("Rendered video at %s (%.1fs)", video_path, time.time() - started)
 
     # Upload the video (GitHub Releases — free, public URL) + status update.
