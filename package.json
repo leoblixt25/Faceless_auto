@@ -8,7 +8,7 @@
     "build": "vite build",
     "lint": "oxlint",
     "preview": "npm run build && cd worker && wrangler dev",
-    "deploy": "npm run build && cd worker && wrangler deploy"
+    "deploy": "node scripts/deploy.mjs"
   },
   "dependencies": {
     "firebase": "^12.18.0",

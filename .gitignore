@@ -30,3 +30,7 @@ dist-ssr
 .wrangler
 .dev.vars*
 !.dev.vars.example
+
+# Local secret material used by the deploy script (never commit these)
+worker/.env.secrets
+worker/.firebase-credentials.json

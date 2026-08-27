@@ -140,6 +140,11 @@ interface Document {
 /**
  * Find the most recent "pending" video document for a user and return its
  * full resource name (project path). Returns null if none is found.
+ *
+ * Note: we query only by `userId` (a single-field index that Firestore keeps
+ * automatically) and then filter `status == 'pending'` + sort by `createdAt`
+ * in code. This avoids needing a composite index (which would otherwise cause
+ * a 400 FAILED_PRECONDITION on every submit-fallback).
  */
 export async function findPendingVideo(
   env: Env,
@@ -152,28 +157,13 @@ export async function findPendingVideo(
     structuredQuery: {
       from: [{ collectionId: 'videos' }],
       where: {
-        compositeFilter: {
-          op: 'AND',
-          filters: [
-            {
-              fieldFilter: {
-                field: { fieldPath: 'userId' },
-                op: 'EQUAL',
-                value: { stringValue: userId },
-              },
-            },
-            {
-              fieldFilter: {
-                field: { fieldPath: 'status' },
-                op: 'EQUAL',
-                value: { stringValue: 'pending' },
-              },
-            },
-          ],
+        fieldFilter: {
+          field: { fieldPath: 'userId' },
+          op: 'EQUAL',
+          value: { stringValue: userId },
         },
       },
-      orderBy: [{ field: { fieldPath: 'createdAt' }, direction: 'DESCENDING' }],
-      limit: 1,
+      limit: 50,
     },
   }
 
@@ -193,8 +183,20 @@ export async function findPendingVideo(
   }
 
   const results = (await response.json()) as QueryResult[]
-  const doc = results.find((r) => r.document)
-  return doc ? (doc.document as Document) : null
+  const pending = results
+    .map((r) => r.document)
+    .filter((d): d is Document => Boolean(d))
+    .filter((d) => {
+      const status = (d.fields.status as { stringValue?: string } | undefined)?.stringValue
+      return status === 'pending'
+    })
+    .sort((a, b) => {
+      const at = (d: Document) =>
+        (d.fields.createdAt as { timestampValue?: string } | undefined)?.timestampValue || ''
+      return at(b).localeCompare(at(a))
+    })
+
+  return pending[0] || null
 }
 
 /** Update a Firestore document's `status` field. */
