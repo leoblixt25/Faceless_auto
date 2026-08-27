@@ -197,12 +197,18 @@ app.post('/api/tiktok/token', async (c) => {
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext) {
-    // Serve the React app (static assets) for any non-API route.
-    // API routes handled by Hono above.
+    const url = new URL(request.url)
+    const isApi = url.pathname.startsWith('/api/')
+
+    if (isApi) {
+      // Any /api/* path (even unknown) goes to Hono, never to static assets.
+      return app.fetch(request, env, ctx)
+    }
+
+    // Serve the React app (static assets) for all non-API routes.
     try {
       if (env.ASSETS) {
-        const assetResponse = await env.ASSETS.fetch(request)
-        return assetResponse
+        return await env.ASSETS.fetch(request)
       }
     } catch {
       // fall through to Hono if asset serving fails

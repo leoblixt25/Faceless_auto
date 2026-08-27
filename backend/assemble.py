@@ -3,7 +3,6 @@
 Concatenates stock clips, cover-crops them to 1080x1920, adds the TTS audio,
 overlays simple caption subtitles, and exports a final MP4.
 """
-import math
 from pathlib import Path
 
 from moviepy import (
@@ -17,6 +16,31 @@ from moviepy import (
 WIDTH = 1080
 HEIGHT = 1920
 FPS = 30
+
+# Possible true-type font file paths (Pillow needs a file, not a family name).
+_FONT_CANDIDATES = [
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+    "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
+    "C:/Windows/Fonts/arialbd.ttf",
+]
+
+_resolved_font: str | None = None
+
+
+def _resolve_font() -> str | None:
+    """Return the first existing font file path, or None if none is found."""
+    global _resolved_font
+    if _resolved_font is not None:
+        return _resolved_font or None
+    for candidate in _FONT_CANDIDATES:
+        if Path(candidate).exists():
+            _resolved_font = candidate
+            return candidate
+    # Try resolving by name via Pillow's default font as a last resort.
+    _resolved_font = ""
+    return None
 
 
 def _cover_resize(clip):
@@ -54,6 +78,11 @@ def build_subtitle_clips(script_chunks, total_duration):
     if n == 0:
         return clips
 
+    font = _resolve_font()
+    if not font:
+        # No usable font file -> render without captions rather than crash.
+        return clips
+
     per_chunk = total_duration / n
     font_size = 52
     for i, chunk in enumerate(script_chunks):
@@ -65,7 +94,7 @@ def build_subtitle_clips(script_chunks, total_duration):
             color="white",
             stroke_color="black",
             stroke_width=3,
-            font="DejaVu-Sans-Bold",
+            font=font,
             method="caption",
             size=(WIDTH - 160, None),
         )
