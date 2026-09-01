@@ -26,6 +26,7 @@ import release_store
 import publish as publisher
 from assets import fetch_assets
 from assemble import assemble_video
+from config import CONFIG
 from script_gen import generate_script, generate_scenes
 from tts import text_to_speech
 
