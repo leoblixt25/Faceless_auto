@@ -46,6 +46,12 @@ class Config:
         return _optional("SEEDANCE_API_KEY")
 
     @property
+    def magic_hour_api_key(self):
+        # Optional — when set, this engine is tried FIRST (free-tier AI
+        # models like ltx-2.3); falls back to Seedance, then Pexels.
+        return _optional("MAGIC_HOUR_API_KEY")
+
+    @property
     def firebase_credentials_path(self):
         # Path to the service-account JSON file, or the JSON content itself.
         return _required("FIREBASE_CREDENTIALS")
