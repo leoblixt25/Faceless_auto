@@ -26,7 +26,7 @@ import release_store
 import publish as publisher
 from assets import fetch_assets
 from assemble import assemble_video
-from script_gen import generate_script
+from script_gen import generate_script, generate_scenes
 from tts import text_to_speech
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -50,7 +50,13 @@ def parse_args(argv=None):
 
 
 def build_video(topic, work_dir, duration=30):
-    """Run the display pipeline and return (script, audio_path, video_path)."""
+    """Run the display pipeline and return (script, audio_path, video_path).
+
+    Uses the Seedance 2.0 AI engine when SEEDANCE_API_KEY is set; otherwise
+    falls back to the Pexels stock-footage montage engine. If Seedance is
+    exhausted (402) or otherwise fails, the Pexels engine is used instead so
+    videos always complete.
+    """
     work = Path(work_dir)
     work.mkdir(parents=True, exist_ok=True)
 
@@ -60,16 +66,57 @@ def build_video(topic, work_dir, duration=30):
     logger.info("Generating audio (edge-tts)...")
     audio_path = text_to_speech(script, str(work / "narration.mp3"))
 
-    # Fetch enough vertical clips to cover the requested length (~10s each).
-    clip_count = max(3, -(-duration // 10))
+    video_path = None
+
+    if CONFIG.seedance_api_key:
+        try:
+            video_path = _build_with_seedance(topic, script, work, duration)
+        except Exception as exc:
+            logger.warning(
+                "Seedance generation failed (%s); falling back to Pexels. %s",
+                type(exc).__name__,
+                exc,
+            )
+            video_path = None
+
+    if video_path is None:
+        video_path = _build_with_pexels(topic, script, work, duration)
+
+    return script, audio_path, video_path
+
+
+def _build_with_seedance(topic, script, work, duration):
+    """Generate one Seedance clip per scene and assemble them into the final video."""
+    logger.info("Generating video with Seedance 2.0 (AI)...")
+    from assemble_seedance import assemble_seedance
+    import seedance
+
+    clip_duration = min(seedance.TARGET_DURATION, duration)
+    scene_count = max(1, -(-duration // clip_duration))  # ceil
+    logger.info("Splitting script into %d scenes...", scene_count)
+    scenes = generate_scenes(script, topic, n=scene_count)
+
+    scene_paths = []
+    for idx, prompt in enumerate(scenes, start=1):
+        dest = str(work / f"scene_{idx}.mp4")
+        logger.info("Scene %d/%d: %s", idx, len(scenes), prompt[:120])
+        scene_paths.append(
+            seedance.generate_one(prompt, dest, duration=clip_duration)
+        )
+
+    output_path = str(work / "final_video.mp4")
+    return assemble_seedance(scene_paths, str(work / "narration.mp3"), script, output_path)
+
+
+def _build_with_pexels(topic, script, work, duration):
+    """Legacy stock-footage montage path (Pexels + MoviePy)."""
     logger.info("Fetching stock assets (Pexels)...")
+    clip_count = max(3, -(-duration // 10))
     video_paths = fetch_assets(topic, count=clip_count, work_dir=str(work))
 
     logger.info("Assembling video (MoviePy)...")
     output_path = str(work / "final_video.mp4")
-    video_path = assemble_video(video_paths, audio_path, script, output_path)
-
-    return script, audio_path, video_path
+    return assemble_video(video_paths, str(work / "narration.mp3"), script, output_path)
 
 
 def main(argv=None):

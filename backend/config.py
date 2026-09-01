@@ -40,6 +40,12 @@ class Config:
         return _required("PEXELS_API_KEY")
 
     @property
+    def seedance_api_key(self):
+        # Optional — when set, videos are generated with AI (Seedance 2.0);
+        # otherwise the pipeline falls back to Pexels stock footage.
+        return _optional("SEEDANCE_API_KEY")
+
+    @property
     def firebase_credentials_path(self):
         # Path to the service-account JSON file, or the JSON content itself.
         return _required("FIREBASE_CREDENTIALS")
