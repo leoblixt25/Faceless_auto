@@ -75,34 +75,36 @@ def _subtitle_clips(script_chunks, total_duration):
         return clips
 
     per_chunk = total_duration / n
+    caption_width = WIDTH - 240
+    caption_max_height = int(HEIGHT * 0.13)
     for i, chunk in enumerate(script_chunks):
         start = i * per_chunk
         duration = min(per_chunk, total_duration - start)
         txt = TextClip(
             text=chunk,
-            font_size=52,
+            font_size=42,
             color="white",
             stroke_color="black",
-            stroke_width=3,
+            stroke_width=2,
             font=font,
             method="caption",
-            size=(WIDTH - 160, None),
+            size=(caption_width, caption_max_height),
         )
-        txt = txt.with_position(("center", 0.78), relative=True).with_duration(
+        txt = txt.with_position(("center", 0.81), relative=True).with_duration(
             duration
         ).with_start(start)
         clips.append(txt)
     return clips
 
 
-def split_script_for_captions(script: str, max_words: int = 5):
+def split_script_for_captions(script: str, max_words: int = 4):
     """Split a script into short caption chunks of <= max_words words."""
     words = script.split()
     chunks = []
     current = []
     for w in words:
         current.append(w)
-        if len(current) >= max_words or (len(" ".join(current)) >= 45):
+        if len(current) >= max_words or (len(" ".join(current)) >= 36):
             chunks.append(" ".join(current))
             current = []
     if current:
