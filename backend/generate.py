@@ -54,9 +54,10 @@ def build_video(topic, work_dir, duration=30):
     """Run the display pipeline and return (script, audio_path, video_path).
 
     Engine priority when the relevant API key is configured:
-      1. Magic Hour (free-tier cinematic AI models, e.g. ltx-2.3)
-      2. Seedance 2.0
-      3. Pexels stock-footage montage
+      1. Replicate (Kling v3 Omni multi-shot = cinematic quality)
+      2. Magic Hour (free-tier AI models)
+      3. Seedance 2.0
+      4. Pexels stock-footage montage
     If an AI engine fails (e.g. out of credits), the next engine is tried so
     videos always complete.
     """
@@ -70,7 +71,7 @@ def build_video(topic, work_dir, duration=30):
     audio_path = text_to_speech(script, str(work / "narration.mp3"))
 
     video_path = None
-    for engine in ("magichour", "seedance", "pexels"):
+    for engine in ("replicate", "magichour", "seedance", "pexels"):
         builder = _engine_builder(engine)
         if builder is None:
             continue
@@ -92,6 +93,15 @@ def build_video(topic, work_dir, duration=30):
 
 def _engine_builder(engine: str):
     """Return the build function for an engine, or None if its key is absent."""
+    if engine == "replicate":
+        if not CONFIG.replicate_api_token:
+            return None
+
+        def _build(topic, script, work, duration):
+            return _build_with_replicate(topic, script, work, duration)
+
+        return _build
+
     if engine == "magichour":
         if not CONFIG.magic_hour_api_key:
             return None
@@ -119,6 +129,26 @@ def _engine_builder(engine: str):
         return _build_with_pexels
 
     return None
+
+
+def _build_with_replicate(topic, script, work, duration, generate_one):
+    """Generate all scenes in one Kling v3 Omni multi-shot call + assemble."""
+    from assemble_seedance import assemble_seedance
+
+    clip_duration = min(10, duration)
+    scene_count = max(1, -(-duration // clip_duration))  # ceil
+    logger.info("Splitting script into %d scenes for Replicate multi-shot...", scene_count)
+    scenes = generate_scenes(script, topic, n=scene_count)
+
+    # Replicate multi-shot returns a single concatenated video; download
+    # to a temp file first so we can layer TTS + captions on top.
+    raw_path = str(work / "replicate_raw.mp4")
+    generate_one(scenes, raw_path, shot_duration=clip_duration)
+
+    output_path = str(work / "final_video.mp4")
+    return assemble_seedance(
+        [raw_path], str(work / "narration.mp3"), script, output_path
+    )
 
 
 def _build_with_ai_scenes(

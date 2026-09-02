@@ -52,6 +52,13 @@ class Config:
         return _optional("MAGIC_HOUR_API_KEY")
 
     @property
+    def replicate_api_token(self):
+        # Optional — when set, this engine is tried FIRST (Kling v3 Omni
+        # multi-shot = cinematic quality). Falls back to Magic Hour,
+        # Seedance, then Pexels.
+        return _optional("REPLICATE_API_TOKEN")
+
+    @property
     def firebase_credentials_path(self):
         # Path to the service-account JSON file, or the JSON content itself.
         return _required("FIREBASE_CREDENTIALS")
