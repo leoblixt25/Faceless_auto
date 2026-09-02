@@ -52,29 +52,51 @@ def generate_script(topic: str, duration: int = 30) -> str:
 def generate_scenes(script: str, topic: str, n: int = 6) -> list[str]:
     """Break a spoken script into `n` visual scene prompts for AI video gen.
 
-    Each returned string is a self-contained, detailed cinematic prompt that
-    describes the visuals for one ~10-second chunk of the narration: subject,
-    action, camera movement, lighting, and mood. Prompts are safe to send over JSON.
+    Each prompt MUST directly visualize the corresponding section of the
+    narration script. Prompts are safe to send over JSON.
     """
     n = max(1, int(n))
 
     system_prompt = (
-        "You are a professional cinematographer converting narration scripts into "
-        "cinematic text-to-video prompts. Given a script and scene count, split it "
-        f"into {n} sequential visual scenes. For each scene output EXACTLY ONE line "
-        "with ONLY the visual prompt (no numbering, no labels, no quotes).\n\n"
-        "Each prompt must be a detailed, photorealistic cinematic description:\n"
-        "- SUBJECT: Specific person/object/environment (e.g. 'a weathered fisherman' not 'a person')\n"
-        "- ACTION: What is happening with natural, fluid movement\n"
-        "- CAMERA: Specific shot type and movement (slow dolly in, tracking shot, "
-        "aerial establishing shot, handheld close-up, rack focus, steadicam orbit)\n"
-        "- LIGHTING: Natural/dramatic (golden hour sidelight, overcast soft light, "
-        "neon-lit night scene, volumetric god rays, backlit silhouette)\n"
-        "- MOOD/ATMOSPHERE: Emotional tone (melancholic, triumphant, intimate, mysterious)\n"
-        "- STYLE: Photorealistic, cinematic color grading, shallow depth of field\n\n"
-        "NEVER use generic descriptions like 'cinematic close-up' alone. "
-        "Each prompt must be visually distinct from the others. "
-        "Write for a vertical 9:16 format. Do not write narration or dialogue."
+        "You are a professional cinematographer. Your job is to convert a spoken "
+        "narration script into SEQUENTIAL visual scene prompts for AI video generation.\n\n"
+        "CRITICAL RULES:\n"
+        "1. EACH prompt MUST directly visualize the corresponding section of the narration.\n"
+        "   Read the script carefully — the visuals must MATCH what is being said.\n"
+        "2. Split the script into {n} equal parts. Each prompt covers one part.\n"
+        "3. Output EXACTLY {n} lines, one prompt per line. No numbering, no labels.\n\n"
+        "EACH prompt must contain ALL of these elements:\n"
+        "- SUBJECT: A specific, concrete person/place/object that relates to the narration\n"
+        "  (e.g. 'a young woman typing on a laptop' not 'a person working')\n"
+        "- ACTION: What the subject is doing — must match the narration content\n"
+        "  (e.g. 'scrolling through job listings with a focused expression')\n"
+        "- CAMERA: One specific shot type and movement\n"
+        "  Options: slow dolly in, tracking shot, aerial drone shot, handheld close-up,\n"
+        "  rack focus pull, steadicam orbit, static wide shot, slow zoom, POV shot\n"
+        "- LIGHTING: One specific lighting setup\n"
+        "  Options: golden hour sidelight, overcast soft light, neon night glow,\n"
+        "  volumetric god rays, backlit silhouette, harsh midday sun, dim indoor warm light\n"
+        "- MOOD: One emotional tone (e.g. hopeful, melancholic, intense, peaceful)\n\n"
+        "FORMAT each prompt as:\n"
+        "[SUBJECT] [ACTION], [CAMERA], [LIGHTING], [MOOD], photorealistic, vertical 9:16.\n\n"
+        "EXAMPLE for script about 'Why most people fail at learning to code':\n"
+        "1. A frustrated young adult staring at a laptop screen full of red error messages, "
+        "slow dolly in, harsh overhead fluorescent light, defeated mood, photorealistic, vertical 9:16.\n"
+        "2. Close-up of fingers hovering uncertainly over a keyboard, rack focus pull, "
+        "dim warm desk lamp light, hesitant mood, photorealistic, vertical 9:16.\n"
+        "3. A person watching a coding tutorial on their phone while lying in bed, "
+        "tracking shot, blue screen glow in dark room, distracted mood, photorealistic, vertical 9:16.\n"
+        "4. Hands typing confidently on a mechanical keyboard, steady orbit, "
+        "golden hour window sidelight, determined mood, photorealistic, vertical 9:16.\n"
+        "5. A terminal window showing successful code output, slow zoom in, "
+        "bright screen glow, triumphant mood, photorealistic, vertical 9:16.\n"
+        "6. Wide shot of a person working at a standing desk with multiple monitors, "
+        "aerial establishing shot, natural daylight, focused mood, photorealistic, vertical 9:16.\n\n"
+        "NEVER:\n"
+        "- Use generic prompts like 'cinematic close-up' without a specific subject\n"
+        "- Write prompts that don't relate to the narration content\n"
+        "- Repeat the same subject/camera/lighting across multiple prompts\n"
+        "- Include dialogue, narration, or text in the visual"
     )
 
     client = _client()
@@ -82,18 +104,18 @@ def generate_scenes(script: str, topic: str, n: int = 6) -> list[str]:
     response = client.chat.completions.create(
         model=GROQ_MODEL,
         messages=[
-            {"role": "system", "content": system_prompt},
+            {"role": "system", "content": system_prompt.format(n=n)},
             {
                 "role": "user",
                 "content": (
-                    f"Script:\n{script}\n\n"
-                    f"Topic: {topic}\n\n"
-                    f"Write {n} detailed, photorealistic cinematic scene prompts, one per line."
+                    f"TOPIC: {topic}\n\n"
+                    f"NARRATION SCRIPT:\n{script}\n\n"
+                    f"Write {n} scene prompts that DIRECTLY visualize each section of the script above."
                 ),
             },
         ],
-        temperature=0.85,
-        max_tokens=1600,
+        temperature=0.8,
+        max_tokens=1800,
     )
 
     content = (response.choices[0].message.content or "").strip()
@@ -103,26 +125,26 @@ def generate_scenes(script: str, topic: str, n: int = 6) -> list[str]:
     scenes = []
     for line in content.splitlines():
         line = line.strip().lstrip("-0123456789. ")
-        if line and line not in ("```",):
+        if line and line not in ("```",) and len(line) > 20:
             scenes.append(line)
 
     # Hard safety cap: never exceed the requested scene count.
     scenes = scenes[:n]
     if len(scenes) < n:
-        # Pad with specific cinematic continuations so assembly always has enough clips.
+        # Pad with topic-specific cinematic continuations.
         pads = [
-            "Slow dolly through a misty forest at dawn, volumetric light filtering through trees, "
-            "photorealistic, cinematic color grading, vertical 9:16 composition.",
-            "Aerial establishing shot of a sprawling city at golden hour, warm sidelight, "
-            "shallow depth of field, photorealistic, vertical 9:16 composition.",
-            "Close-up of hands working with careful precision, shallow depth of field, "
-            "natural window light, intimate atmosphere, photorealistic, vertical 9:16.",
-            "Tracking shot following someone walking through a crowded market, "
-            "warm ambient light, vibrant colors, photorealistic, vertical 9:16 composition.",
-            "Wide shot of a dramatic landscape at sunset, golden hour backlight, "
-            "silhouettes against the sky, photorealistic, cinematic, vertical 9:16.",
-            "Slow orbit around a detailed subject, soft diffused lighting, "
-            "bokeh background, photorealistic, intimate mood, vertical 9:16 composition.",
+            f"Close-up of a person thinking deeply about {topic}, slow dolly in, "
+            "natural window sidelight, contemplative mood, photorealistic, vertical 9:16.",
+            f"Tracking shot through a workspace related to {topic}, "
+            "soft ambient light, focused mood, photorealistic, vertical 9:16.",
+            f"Hands working on something related to {topic}, rack focus pull, "
+            "warm desk lamp light, determined mood, photorealistic, vertical 9:16.",
+            f"Wide establishing shot of a location relevant to {topic}, "
+            "golden hour sidelight, atmospheric mood, photorealistic, vertical 9:16.",
+            f"Slow orbit around a key object from {topic}, "
+            "dramatic rim light, mysterious mood, photorealistic, vertical 9:16.",
+            f"POV shot experiencing {topic} firsthand, steady tracking, "
+            "natural daylight, immersive mood, photorealistic, vertical 9:16.",
         ]
         for i in range(n - len(scenes)):
             scenes.append(pads[i % len(pads)])
