@@ -9,50 +9,15 @@ from pathlib import Path
 from moviepy import (
     AudioFileClip,
     CompositeVideoClip,
-    TextClip,
     VideoFileClip,
     concatenate_videoclips,
 )
 
+from captions import build_caption_clips, resolve_font, split_script_for_captions
+
 WIDTH = 1080
 HEIGHT = 1920
 FPS = 30
-
-# Caption styling.
-CAPTION_FONT_SIZE = 58
-CAPTION_COLOR = "white"
-CAPTION_STROKE = "black"
-CAPTION_STROKE_WIDTH = 4
-CAPTION_MARGIN_X = 160
-CAPTION_MAX_LINES = 2
-CAPTION_PAD_X = 36
-CAPTION_PAD_Y = 22
-CAPTION_BG_OPACITY = 0.55
-CAPTION_RADIUS = 28
-CAPTION_Y = 0.8
-
-# Keep the same font resolution as assemble.py.
-_FONT_CANDIDATES = [
-    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-    "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
-    "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
-    "C:/Windows/Fonts/arialbd.ttf",
-]
-
-_resolved_font: str | None = None
-
-
-def _resolve_font() -> str | None:
-    global _resolved_font
-    if _resolved_font is not None:
-        return _resolved_font or None
-    for candidate in _FONT_CANDIDATES:
-        if Path(candidate).exists():
-            _resolved_font = candidate
-            return candidate
-    _resolved_font = ""
-    return None
 
 
 def _fit_vertical(clip):
@@ -75,87 +40,6 @@ def _fit_vertical(clip):
         top = max(0, (new_h - HEIGHT) // 2)
         clip = clip.cropped(y1=top, y2=top + HEIGHT)
     return clip
-
-
-def _render_caption(chunk, font, total_duration):
-    """Render one caption chunk as a styled TextClip with backdrop."""
-    txt = TextClip(
-        text=chunk,
-        font_size=CAPTION_FONT_SIZE,
-        color=CAPTION_COLOR,
-        stroke_color=CAPTION_STROKE,
-        stroke_width=CAPTION_STROKE_WIDTH,
-        font=font,
-        method="caption",
-        size=(WIDTH - CAPTION_MARGIN_X, None),
-    )
-    tw, th = txt.size
-
-    bg_w = tw + CAPTION_PAD_X * 2
-    bg_h = th + CAPTION_PAD_Y * 2
-    bg = _caption_backdrop(bg_w, bg_h)
-
-    cap = CompositeVideoClip(
-        [bg.with_position("center"), txt.with_position("center")],
-        size=(bg_w, bg_h),
-    )
-    return cap.with_position(("center", CAPTION_Y), relative=True).with_duration(
-        total_duration
-    )
-
-
-def _caption_backdrop(width: int, height: int):
-    """Transparent rounded-rect ref image via Pillow (no video Fx needed)."""
-    from PIL import Image, ImageDraw
-
-    import numpy as np
-    from moviepy import ImageClip
-
-    img = Image.new("RGBA", (width, height), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(img)
-    draw.rounded_rectangle(
-        (0, 0, width - 1, height - 1),
-        radius=CAPTION_RADIUS,
-        fill=(0, 0, 0, int(255 * CAPTION_BG_OPACITY)),
-    )
-    arr = np.array(img)
-    rgb = arr[:, :, :3].copy()
-    alpha = arr[:, :, 3].copy()
-    return ImageClip(rgb).with_mask(ImageClip(alpha, is_mask=True))
-
-
-def _subtitle_clips(script_chunks, total_duration):
-    clips = []
-    n = len(script_chunks)
-    if n == 0:
-        return clips
-
-    font = _resolve_font()
-    if not font:
-        return clips
-
-    per_chunk = total_duration / n
-    for i, chunk in enumerate(script_chunks):
-        start = i * per_chunk
-        duration = min(per_chunk, total_duration - start)
-        clips.append(_render_caption(chunk, font, duration).with_start(start))
-    return clips
-
-
-def split_script_for_captions(script: str, max_words: int = 4, max_chars: int = 28):
-    """Split a script into short caption chunks that fit on <=2 lines."""
-    words = script.split()
-    chunks = []
-    current = []
-    for w in words:
-        current.append(w)
-        joined = " ".join(current)
-        if len(current) >= max_words or len(joined) >= max_chars:
-            chunks.append(joined)
-            current = []
-    if current:
-        chunks.append(" ".join(current))
-    return chunks
 
 
 def assemble_seedance(
@@ -186,10 +70,12 @@ def assemble_seedance(
         video = video.subclipped(0, audio_duration)
     video = video.with_audio(audio)
 
-    chunks = split_script_for_captions(script)
-    captions = _subtitle_clips(chunks, audio_duration)
-    if captions:
-        video = CompositeVideoClip([video, *captions], size=(WIDTH, HEIGHT))
+    font = resolve_font()
+    if font:
+        chunks = split_script_for_captions(script)
+        captions = build_caption_clips(chunks, audio_duration, font)
+        if captions:
+            video = CompositeVideoClip([video, *captions], size=(WIDTH, HEIGHT))
 
     video.write_videofile(
         str(output),

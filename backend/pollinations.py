@@ -31,6 +31,13 @@ RATE_LIMIT_SECONDS = 15.0
 MAX_ATTEMPTS = 4
 SHOT_DURATION = 10
 
+# Appended to every image prompt so the model does not bake text, subtitle
+# bars, or dark vignettes into the frames (our caption overlay owns the text).
+PROMPT_SUFFIX = (
+    " Clean, seamless, photorealistic. No text, no subtitles, no watermark, "
+    "no logo, no dark vignette, no color bars, no caption, no lettering."
+)
+
 
 class PollinationsError(RuntimeError):
     """Raised when the free-tier image endpoint cannot be used."""
@@ -135,7 +142,7 @@ def generate_one(
     clips = []
     for idx in range(images_per_scene):
         img = str(image_dir / f"scene_{idx}.jpg")
-        _generate_image(prompt, img, seed=idx)
+        _generate_image(prompt + PROMPT_SUFFIX, img, seed=idx)
         clip = str(image_dir / f"clip_{idx}.mp4")
         direction = "out" if idx % 2 == 1 else "in"
         _kenburns_clip(img, clip, shot_len, direction)
