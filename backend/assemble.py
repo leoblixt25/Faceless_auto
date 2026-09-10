@@ -17,6 +17,18 @@ WIDTH = 1080
 HEIGHT = 1920
 FPS = 30
 
+# Caption styling (shared with assemble_seedance.py).
+CAPTION_FONT_SIZE = 58
+CAPTION_COLOR = "white"
+CAPTION_STROKE = "black"
+CAPTION_STROKE_WIDTH = 4
+CAPTION_MARGIN_X = 160
+CAPTION_PAD_X = 36
+CAPTION_PAD_Y = 22
+CAPTION_BG_OPACITY = 0.55
+CAPTION_RADIUS = 28
+CAPTION_Y = 0.8
+
 # Possible true-type font file paths (Pillow needs a file, not a family name).
 _FONT_CANDIDATES = [
     "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
@@ -71,6 +83,53 @@ def _mirror_if_landscape_fallback(clip):
     return clip
 
 
+def _render_caption(chunk, font, total_duration):
+    """Render one caption chunk as a styled TextClip with backdrop."""
+    txt = TextClip(
+        text=chunk,
+        font_size=CAPTION_FONT_SIZE,
+        color=CAPTION_COLOR,
+        stroke_color=CAPTION_STROKE,
+        stroke_width=CAPTION_STROKE_WIDTH,
+        font=font,
+        method="caption",
+        size=(WIDTH - CAPTION_MARGIN_X, None),
+    )
+    tw, th = txt.size
+
+    bg_w = tw + CAPTION_PAD_X * 2
+    bg_h = th + CAPTION_PAD_Y * 2
+    bg = _caption_backdrop(bg_w, bg_h)
+
+    cap = CompositeVideoClip(
+        [bg.with_position("center"), txt.with_position("center")],
+        size=(bg_w, bg_h),
+    )
+    return cap.with_position(("center", CAPTION_Y), relative=True).with_duration(
+        total_duration
+    )
+
+
+def _caption_backdrop(width: int, height: int):
+    """Transparent rounded-rect ref image via Pillow (no video Fx needed)."""
+    from PIL import Image, ImageDraw
+
+    import numpy as np
+    from moviepy import ImageClip
+
+    img = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+    draw.rounded_rectangle(
+        (0, 0, width - 1, height - 1),
+        radius=CAPTION_RADIUS,
+        fill=(0, 0, 0, int(255 * CAPTION_BG_OPACITY)),
+    )
+    arr = np.array(img)
+    rgb = arr[:, :, :3].copy()
+    alpha = arr[:, :, 3].copy()
+    return ImageClip(rgb).with_mask(ImageClip(alpha, is_mask=True))
+
+
 def build_subtitle_clips(script_chunks, total_duration):
     """Create a list of caption TextClips timed across the video duration."""
     clips = []
@@ -84,36 +143,21 @@ def build_subtitle_clips(script_chunks, total_duration):
         return clips
 
     per_chunk = total_duration / n
-    font_size = 52
     for i, chunk in enumerate(script_chunks):
         start = i * per_chunk
         duration = min(per_chunk, total_duration - start)
-        txt = TextClip(
-            text=chunk,
-            font_size=font_size,
-            color="white",
-            stroke_color="black",
-            stroke_width=3,
-            font=font,
-            method="caption",
-            size=(WIDTH - 160, None),
-        )
-        # Position centrally, slightly above the bottom.
-        txt = txt.with_position(("center", 0.78), relative=True).with_duration(
-            duration
-        ).with_start(start)
-        clips.append(txt)
+        clips.append(_render_caption(chunk, font, duration).with_start(start))
     return clips
 
 
-def split_script_for_captions(script: str, max_words: int = 5):
+def split_script_for_captions(script: str, max_words: int = 4, max_chars: int = 28):
     """Split a script into short caption chunks of <= max_words words."""
     words = script.split()
     chunks = []
     current = []
     for w in words:
         current.append(w)
-        if len(current) >= max_words or (len(" ".join(current)) >= 45):
+        if len(current) >= max_words or (len(" ".join(current)) >= max_chars):
             chunks.append(" ".join(current))
             current = []
     if current:
