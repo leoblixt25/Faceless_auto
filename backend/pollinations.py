@@ -150,7 +150,8 @@ def generate_one(
     list_file = image_dir / "concat.txt"
     with open(list_file, "w", encoding="utf-8") as f:
         for clip in clips:
-            f.write(f"file '{Path(clip).as_posix()}'\n")
+            # concat demuxer resolves entries relative to concat.txt's dir.
+            f.write(f"file '{Path(clip).name}'\n")
 
     ffmpeg = _ffmpeg_path()
     cmd = [
