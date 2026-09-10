@@ -57,7 +57,8 @@ def build_video(topic, work_dir, duration=30, cinematic=""):
       1. Replicate (Kling v3 Omni multi-shot = cinematic quality)
       2. Magic Hour (free-tier AI models)
       3. Seedance 2.0
-      4. Pexels stock-footage montage
+      4. Pollinations (free, no key: AI images + Ken Burns camera moves)
+      5. Pexels stock-footage montage
     If an AI engine fails (e.g. out of credits), the next engine is tried so
     videos always complete.
 
@@ -73,7 +74,7 @@ def build_video(topic, work_dir, duration=30, cinematic=""):
     audio_path = text_to_speech(script, str(work / "narration.mp3"))
 
     video_path = None
-    for engine in ("replicate", "magichour", "seedance", "pexels"):
+    for engine in ("replicate", "magichour", "seedance", "pollinations", "pexels"):
         builder = _engine_builder(engine, cinematic)
         if builder is None:
             continue
@@ -125,6 +126,16 @@ def _engine_builder(engine: str, cinematic: str = ""):
 
         return lambda topic, script, work, duration: _build_with_ai_scenes(
             topic, script, work, duration, seedance.generate_one, assemble_seedance, cinematic
+        )
+
+    if engine == "pollinations":
+        # Free tier, needs no API key: AI-generated vertical images animated
+        # with Ken Burns camera moves. Always available as the last AI engine.
+        import pollinations
+        from assemble_seedance import assemble_seedance
+
+        return lambda topic, script, work, duration: _build_with_ai_scenes(
+            topic, script, work, duration, pollinations.generate_one, assemble_seedance, cinematic
         )
 
     if engine == "pexels":
