@@ -28,6 +28,7 @@ export interface ServiceAccount {
 export interface ClientPayload {
   userId: string
   topic: string
+  cinematic?: string
   platform: string
   documentId?: string
   duration?: number

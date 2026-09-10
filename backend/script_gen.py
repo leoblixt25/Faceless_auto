@@ -1,4 +1,6 @@
 """Script generation via the Groq API."""
+import re
+
 from groq import Groq
 
 from config import CONFIG
@@ -49,103 +51,144 @@ def generate_script(topic: str, duration: int = 30) -> str:
     return script
 
 
-def generate_scenes(script: str, topic: str, n: int = 6) -> list[str]:
-    """Break a spoken script into `n` visual scene prompts for AI video gen.
+def _split_script_into_chunks(script: str, n: int) -> list[str]:
+    """Split a script into `n` balanced chunks, preferring sentence boundaries.
 
-    Each prompt MUST directly visualize the corresponding section of the
-    narration script. Prompts are safe to send over JSON.
+    Chunk i is guaranteed to align with the i-th equal time segment of the
+    final video, so the scene visual matches what the narration says in the
+    same moment the viewer hears it.
+    """
+    script = (script or "").strip()
+    if not script:
+        return [" "] * n
+
+    sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+", script) if s.strip()]
+    if not sentences:
+        sentences = [script]
+
+    total_len = sum(len(s) for s in sentences)
+    target = total_len / n
+
+    chunks = []
+    current = []
+    current_len = 0
+    for s in sentences:
+        current.append(s)
+        current_len += len(s)
+        if current_len >= target and len(chunks) < n - 1:
+            chunks.append(" ".join(current))
+            current = []
+            current_len = 0
+    if current:
+        chunks.append(" ".join(current))
+
+    # If the script has fewer sentences than chunks, split the longest chunk
+    # at a word boundary until we reach the requested count.
+    guard = 0
+    while len(chunks) < n and guard < n * 4:
+        guard += 1
+        idx = max(range(len(chunks)), key=lambda i: len(chunks[i]))
+        longest = chunks[idx]
+        words = longest.split()
+        if len(words) < 6:
+            break
+        half = sum(len(w) + 1 for w in words[: len(words) // 2])
+        left = longest[:half].rstrip()
+        right = longest[half:].lstrip()
+        if not left or not right:
+            break
+        chunks[idx : idx + 1] = [left, right]
+
+    return chunks[:n]
+
+
+def _clean_scene_prompt(text: str, topic: str) -> str:
+    """Collapse one LLM response into a single clean scene prompt line."""
+    text = (text or "").strip()
+    if text.startswith("```"):
+        text = text.strip("`").strip()
+    # Strip one leading numbering/label such as "1.", "2)", "-".
+    text = re.sub(r"^(?:\d+[.)]|\d+\s*[:=]|-)\s*", "", text)
+    text = " ".join(text.split())
+    if len(text) < 25:
+        return (
+            f"Close-up of a subject directly related to {topic}, slow dolly in, "
+            "natural window sidelight, contemplative mood, photorealistic, vertical 9:16."
+        )
+    return text
+
+
+def generate_scenes(
+    script: str, topic: str, n: int = 6, cinematic: str | None = None
+) -> list[str]:
+    """Generate `n` visual scene prompts, ONE per narration chunk.
+
+    The narration script is split into `n` balanced chunks deterministically.
+    Each chunk gets its OWN Groq call, so scene i ALWAYS visualizes the exact
+    narration spoken during time-segment i — no cross-page confusion. Each
+    prompt is safe to send over JSON.
+
+    `cinematic`: optional global visual scenario/director's note applied to
+    every scene (e.g. "arri alexa footage, shallow depth of field, warm grade,
+    slow motion").
     """
     n = max(1, int(n))
+    chunks = _split_script_into_chunks(script, n)
 
     system_prompt = (
-        "You are a professional cinematographer. Your job is to convert a spoken "
-        "narration script into SEQUENTIAL visual scene prompts for AI video generation.\n\n"
-        "CRITICAL RULES:\n"
-        "1. EACH prompt MUST directly visualize the corresponding section of the narration.\n"
-        "   Read the script carefully — the visuals must MATCH what is being said.\n"
-        "2. Split the script into {n} equal parts. Each prompt covers one part.\n"
-        "3. Output EXACTLY {n} lines, one prompt per line. No numbering, no labels.\n\n"
-        "EACH prompt must contain ALL of these elements:\n"
-        "- SUBJECT: A specific, concrete person/place/object that relates to the narration\n"
-        "  (e.g. 'a young woman typing on a laptop' not 'a person working')\n"
-        "- ACTION: What the subject is doing — must match the narration content\n"
-        "  (e.g. 'scrolling through job listings with a focused expression')\n"
-        "- CAMERA: One specific shot type and movement\n"
-        "  Options: slow dolly in, tracking shot, aerial drone shot, handheld close-up,\n"
-        "  rack focus pull, steadicam orbit, static wide shot, slow zoom, POV shot\n"
-        "- LIGHTING: One specific lighting setup\n"
-        "  Options: golden hour sidelight, overcast soft light, neon night glow,\n"
-        "  volumetric god rays, backlit silhouette, harsh midday sun, dim indoor warm light\n"
-        "- MOOD: One emotional tone (e.g. hopeful, melancholic, intense, peaceful)\n\n"
-        "FORMAT each prompt as:\n"
-        "[SUBJECT] [ACTION], [CAMERA], [LIGHTING], [MOOD], photorealistic, vertical 9:16.\n\n"
-        "EXAMPLE for script about 'Why most people fail at learning to code':\n"
-        "1. A frustrated young adult staring at a laptop screen full of red error messages, "
-        "slow dolly in, harsh overhead fluorescent light, defeated mood, photorealistic, vertical 9:16.\n"
-        "2. Close-up of fingers hovering uncertainly over a keyboard, rack focus pull, "
-        "dim warm desk lamp light, hesitant mood, photorealistic, vertical 9:16.\n"
-        "3. A person watching a coding tutorial on their phone while lying in bed, "
-        "tracking shot, blue screen glow in dark room, distracted mood, photorealistic, vertical 9:16.\n"
-        "4. Hands typing confidently on a mechanical keyboard, steady orbit, "
-        "golden hour window sidelight, determined mood, photorealistic, vertical 9:16.\n"
-        "5. A terminal window showing successful code output, slow zoom in, "
-        "bright screen glow, triumphant mood, photorealistic, vertical 9:16.\n"
-        "6. Wide shot of a person working at a standing desk with multiple monitors, "
-        "aerial establishing shot, natural daylight, focused mood, photorealistic, vertical 9:16.\n\n"
-        "NEVER:\n"
-        "- Use generic prompts like 'cinematic close-up' without a specific subject\n"
-        "- Write prompts that don't relate to the narration content\n"
-        "- Repeat the same subject/camera/lighting across multiple prompts\n"
-        "- Include dialogue, narration, or text in the visual"
+        "You are a cinematographer directing AI video generation. Convert ONE "
+        "narration chunk into EXACTLY ONE scene prompt.\n"
+        "The SUBJECT and the ACTION MUST be drawn DIRECTLY from the narration "
+        "chunk's content: the visual must show what the narration is talking "
+        "about, not a generic unrelated shot.\n"
+        "Every prompt must include:\n"
+        "- SUBJECT: a specific, concrete person/place/object tied to the chunk "
+        "('a young woman typing on a laptop' not 'a person working')\n"
+        "- ACTION: what the subject is doing, matching the narration content\n"
+        "- CAMERA: one shot type + movement (slow dolly in, tracking shot, "
+        "aerial drone shot, handheld close-up, rack focus pull, steadicam "
+        "orbit, static wide shot, slow zoom, POV shot)\n"
+        "- LIGHTING: one setup (golden hour sidelight, overcast soft light, "
+        "neon night glow, volumetric god rays, backlit silhouette, dim indoor "
+        "warm light)\n"
+        "- MOOD: one emotional tone matching the narration\n"
+        "FORMAT: [SUBJECT] [ACTION], [CAMERA], [LIGHTING], [MOOD], "
+        "photorealistic, vertical 9:16.\n"
+        "NEVER include dialogue, narration text, captions or watermarks in the visual."
     )
 
     client = _client()
 
-    response = client.chat.completions.create(
-        model=GROQ_MODEL,
-        messages=[
-            {"role": "system", "content": system_prompt.format(n=n)},
-            {
-                "role": "user",
-                "content": (
-                    f"TOPIC: {topic}\n\n"
-                    f"NARRATION SCRIPT:\n{script}\n\n"
-                    f"Write {n} scene prompts that DIRECTLY visualize each section of the script above."
-                ),
-            },
-        ],
-        temperature=0.8,
-        max_tokens=1800,
-    )
-
-    content = (response.choices[0].message.content or "").strip()
-    if not content:
-        raise RuntimeError("Groq returned no scene prompts.")
-
     scenes = []
-    for line in content.splitlines():
-        line = line.strip().lstrip("-0123456789. ")
-        if line and line not in ("```",) and len(line) > 20:
-            scenes.append(line)
+    for i, chunk in enumerate(chunks):
+        prev = " ".join(chunks[i - 1].split()[:6]) if i > 0 else "this is the first chunk"
+        nxt = (
+            " ".join(chunks[i + 1].split()[:6])
+            if i + 1 < len(chunks)
+            else "this is the final chunk"
+        )
+        user = (
+            f"TOPIC: {topic}\n"
+            + (
+                f"CINEMATIC SCENARIO (apply this global visual style): {cinematic}\n"
+                if cinematic
+                else ""
+            )
+            + f"NARRATION CHUNK {i + 1} of {n} — visualize ONLY this:\n{chunk}\n\n"
+            f"PREVIOUS CHUNK (continuity): {prev}\n"
+            f"NEXT CHUNK (continuity): {nxt}\n\n"
+            "Write EXACTLY ONE scene prompt in the required format."
+        )
+        response = client.chat.completions.create(
+            model=GROQ_MODEL,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user},
+            ],
+            temperature=0.8,
+            max_tokens=220,
+        )
+        text = (response.choices[0].message.content or "").strip()
+        scenes.append(_clean_scene_prompt(text, topic))
 
-    # Hard safety cap: never exceed the requested scene count.
-    scenes = scenes[:n]
-    if len(scenes) < n:
-        # Pad with topic-specific cinematic continuations.
-        pads = [
-            f"Close-up of a person thinking deeply about {topic}, slow dolly in, "
-            "natural window sidelight, contemplative mood, photorealistic, vertical 9:16.",
-            f"Tracking shot through a workspace related to {topic}, "
-            "soft ambient light, focused mood, photorealistic, vertical 9:16.",
-            f"Hands working on something related to {topic}, rack focus pull, "
-            "warm desk lamp light, determined mood, photorealistic, vertical 9:16.",
-            f"Wide establishing shot of a location relevant to {topic}, "
-            "golden hour sidelight, atmospheric mood, photorealistic, vertical 9:16.",
-            f"Slow orbit around a key object from {topic}, "
-            "dramatic rim light, mysterious mood, photorealistic, vertical 9:16.",
-            f"POV shot experiencing {topic} firsthand, steady tracking, "
-            "natural daylight, immersive mood, photorealistic, vertical 9:16.",
-        ]
-        for i in range(n - len(scenes)):
-            scenes.append(pads[i % len(pads)])
-    return scenes
+    return scenes[:n]

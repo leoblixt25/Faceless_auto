@@ -50,7 +50,7 @@ def parse_args(argv=None):
     return args
 
 
-def build_video(topic, work_dir, duration=30):
+def build_video(topic, work_dir, duration=30, cinematic=""):
     """Run the display pipeline and return (script, audio_path, video_path).
 
     Engine priority when the relevant API key is configured:
@@ -60,6 +60,8 @@ def build_video(topic, work_dir, duration=30):
       4. Pexels stock-footage montage
     If an AI engine fails (e.g. out of credits), the next engine is tried so
     videos always complete.
+
+    `cinematic`: optional global visual scenario applied to every scene prompt.
     """
     work = Path(work_dir)
     work.mkdir(parents=True, exist_ok=True)
@@ -72,7 +74,7 @@ def build_video(topic, work_dir, duration=30):
 
     video_path = None
     for engine in ("replicate", "magichour", "seedance", "pexels"):
-        builder = _engine_builder(engine)
+        builder = _engine_builder(engine, cinematic)
         if builder is None:
             continue
         try:
@@ -91,14 +93,14 @@ def build_video(topic, work_dir, duration=30):
     return script, audio_path, video_path
 
 
-def _engine_builder(engine: str):
+def _engine_builder(engine: str, cinematic: str = ""):
     """Return the build function for an engine, or None if its key is absent."""
     if engine == "replicate":
         if not CONFIG.replicate_api_token:
             return None
 
         def _build(topic, script, work, duration):
-            return _build_with_replicate(topic, script, work, duration)
+            return _build_with_replicate(topic, script, work, duration, cinematic)
 
         return _build
 
@@ -110,7 +112,7 @@ def _engine_builder(engine: str):
 
         def _build(topic, script, work, duration):
             return _build_with_ai_scenes(
-                topic, script, work, duration, mh_generate_one, assemble_seedance
+                topic, script, work, duration, mh_generate_one, assemble_seedance, cinematic
             )
 
         return _build
@@ -122,7 +124,7 @@ def _engine_builder(engine: str):
         import seedance
 
         return lambda topic, script, work, duration: _build_with_ai_scenes(
-            topic, script, work, duration, seedance.generate_one, assemble_seedance
+            topic, script, work, duration, seedance.generate_one, assemble_seedance, cinematic
         )
 
     if engine == "pexels":
@@ -131,14 +133,15 @@ def _engine_builder(engine: str):
     return None
 
 
-def _build_with_replicate(topic, script, work, duration, generate_one):
+def _build_with_replicate(topic, script, work, duration, cinematic=""):
     """Generate all scenes in one Kling v3 Omni multi-shot call + assemble."""
     from assemble_seedance import assemble_seedance
+    from replicate import generate_one
 
     clip_duration = min(10, duration)
     scene_count = max(1, -(-duration // clip_duration))  # ceil
     logger.info("Splitting script into %d scenes for Replicate multi-shot...", scene_count)
-    scenes = generate_scenes(script, topic, n=scene_count)
+    scenes = generate_scenes(script, topic, n=scene_count, cinematic=cinematic)
 
     # Replicate multi-shot returns a single concatenated video; download
     # to a temp file first so we can layer TTS + captions on top.
@@ -152,7 +155,7 @@ def _build_with_replicate(topic, script, work, duration, generate_one):
 
 
 def _build_with_ai_scenes(
-    topic, script, work, duration, generate_one, assemble_seedance
+    topic, script, work, duration, generate_one, assemble_seedance, cinematic=""
 ):
     """Generate one AI clip per scene and assemble them into the final video."""
     from script_gen import generate_scenes
@@ -160,7 +163,7 @@ def _build_with_ai_scenes(
     clip_duration = min(10, duration)
     scene_count = max(1, -(-duration // clip_duration))  # ceil
     logger.info("Splitting script into %d scenes...", scene_count)
-    scenes = generate_scenes(script, topic, n=scene_count)
+    scenes = generate_scenes(script, topic, n=scene_count, cinematic=cinematic)
 
     scene_paths = []
     for idx, prompt in enumerate(scenes, start=1):
@@ -190,7 +193,10 @@ def main(argv=None):
     started = time.time()
 
     # --- Phase 3: render the video -------------------------------------
-    script, audio_path, video_path = build_video(args.topic, "assets", args.duration)
+    cinematic = os.environ.get("CINEMATIC", "")
+    script, audio_path, video_path = build_video(
+        args.topic, "assets", args.duration, cinematic
+    )
     logger.info("Rendered video at %s (%.1fs)", video_path, time.time() - started)
 
     # Upload the video (GitHub Releases — free, public URL) + status update.

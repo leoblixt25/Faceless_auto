@@ -12,10 +12,11 @@ import { VIDEO_STATUS } from '../utils/constants'
 
 const videosCollection = collection(db, 'videos')
 
-export async function createVideo({ userId, topic, platform, duration }) {
+export async function createVideo({ userId, topic, cinematic, platform, duration }) {
   const docRef = await addDoc(videosCollection, {
     userId,
     topic,
+    cinematic: cinematic || '',
     platform,
     duration: duration || 30,
     status: VIDEO_STATUS.PENDING,

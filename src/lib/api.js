@@ -5,7 +5,7 @@ const WORKER_URL = import.meta.env.VITE_WORKER_URL || ''
  * If VITE_WORKER_URL is not configured, this resolves without calling
  * anything so local development still works.
  */
-export async function dispatchVideoGeneration({ userId, topic, platform, documentId, duration }) {
+export async function dispatchVideoGeneration({ userId, topic, cinematic, platform, documentId, duration }) {
   if (!WORKER_URL) {
     console.warn(
       'VITE_WORKER_URL is not set; skipping worker dispatch. ' +
@@ -17,7 +17,7 @@ export async function dispatchVideoGeneration({ userId, topic, platform, documen
   const response = await fetch(`${WORKER_URL}/api/generate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ userId, topic, platform, documentId, duration }),
+    body: JSON.stringify({ userId, topic, cinematic, platform, documentId, duration }),
   })
 
   const data = await response.json().catch(() => ({}))

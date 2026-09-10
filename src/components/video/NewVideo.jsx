@@ -9,6 +9,7 @@ export default function NewVideo() {
   const { user } = useAuth()
   const navigate = useNavigate()
   const [topic, setTopic] = useState('')
+  const [cinematic, setCinematic] = useState('')
   const [platform, setPlatform] = useState(PLATFORMS[0].value)
   const [duration, setDuration] = useState(DURATION_OPTIONS[0].value)
   const [submitting, setSubmitting] = useState(false)
@@ -24,6 +25,7 @@ export default function NewVideo() {
       const documentId = await createVideo({
         userId: user.uid,
         topic: topic.trim(),
+        cinematic: cinematic.trim(),
         platform,
         duration,
         status: 'pending',
@@ -33,12 +35,14 @@ export default function NewVideo() {
       await dispatchVideoGeneration({
         userId: user.uid,
         topic: topic.trim(),
+        cinematic: cinematic.trim(),
         platform,
         documentId,
         duration,
       })
 
       setTopic('')
+      setCinematic('')
     } catch (err) {
       console.error('Failed to submit video request:', err)
       setError('Failed to submit your request. Please try again.')
@@ -67,6 +71,23 @@ export default function NewVideo() {
             rows={4}
             className="w-full resize-none rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-sm text-white placeholder-zinc-500 outline-none transition focus:border-purple-500 focus:ring-2 focus:ring-purple-500/30"
           />
+        </div>
+
+        <div>
+          <label htmlFor="cinematic" className="mb-1.5 block text-sm font-medium text-zinc-300">
+            Cinematic Scenario (Visual Style)
+          </label>
+          <textarea
+            id="cinematic"
+            value={cinematic}
+            onChange={(event) => setCinematic(event.target.value)}
+            placeholder="Optional. e.g. ARRI Alexa footage, shallow depth of field, anamorphic lens flare, slow motion, teal and orange grade, rain-soaked city at night"
+            rows={3}
+            className="w-full resize-none rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-sm text-white placeholder-zinc-500 outline-none transition focus:border-purple-500 focus:ring-2 focus:ring-purple-500/30"
+          />
+          <p className="mt-1 text-xs text-zinc-500">
+            Leave empty for the default look. Applied to every AI scene so the video feels like one consistent film.
+          </p>
         </div>
 
         <div>

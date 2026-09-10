@@ -64,6 +64,7 @@ app.post('/api/generate', async (c) => {
   let body: {
     userId?: string
     topic?: string
+    cinematic?: string
     platform?: string
     documentId?: string
     duration?: number
@@ -72,6 +73,7 @@ app.post('/api/generate', async (c) => {
     body = (await c.req.json()) as {
       userId?: string
       topic?: string
+      cinematic?: string
       platform?: string
       documentId?: string
       duration?: number
@@ -82,6 +84,7 @@ app.post('/api/generate', async (c) => {
 
   const userId = typeof body.userId === 'string' ? body.userId.trim() : ''
   const topic = typeof body.topic === 'string' ? body.topic.trim() : ''
+  const cinematic = typeof body.cinematic === 'string' ? body.cinematic.trim() : ''
   const platform = typeof body.platform === 'string' ? body.platform.trim() : ''
   const documentId =
     typeof body.documentId === 'string' ? body.documentId.trim() : ''
@@ -106,6 +109,7 @@ app.post('/api/generate', async (c) => {
   const clientPayload = {
     userId,
     topic,
+    cinematic,
     platform,
     documentId: '',
     duration,
